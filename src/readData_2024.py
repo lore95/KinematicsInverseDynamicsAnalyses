@@ -15,11 +15,17 @@ index = 0  # Example: index=0 for Walking, index=1 for Jogging, index=2 for Crou
 data_trc = pd.read_csv(f"{name_motion[index]}.csv")
 data_grf = pd.read_csv(f"{name_grf[index]}.csv")
 
+
 # Downsample ground reaction data to match the trajectory data length
 data_grf_s = data_grf.iloc[::10, :].reset_index(drop=True)
 
 # Conversion factor from mm to meters
 to_meters = 1 / 1000
+
+#constants for momentum calculations
+bodyWeight = 72.8
+footWeight = 0.0145 * bodyWeight
+gravity = 9.81
 
 # Extract and convert relevant columns from marker trajectory data
 RTOE_x = data_trc['RTOO_Y'] * to_meters
@@ -62,9 +68,68 @@ FP2_force_y = data_grf_s['FP2_Force_Z']
 FP2_COP_x = data_grf_s['FP2_COP_Y'] * to_meters
 FP2_COP_y = data_grf_s['FP2_COP_Z'] * to_meters
 
+leftFootVectorLenght = LANKLE_x[41] - LTOE_x[41]
+rightFootVectorLeght = (RANKLE_x[41] - RTOE_x[41], RANKLE_y[41] - RTOE_y[41])
+rightFootLength = np.sqrt(rightFootVectorLeght[0]**2 + rightFootVectorLeght[1]**2)
+
+#arrays to be populated during frame analysis
+rightAnkleAngles = []
+leftAnkleAngles = []
+
+rightAnkleRadiants = []
+leftAnkleRadiants = []
+
+rightKneeAngles = []
+leftKneeAngles = []
+
+rightKneeRadiants = []
+leftKneeRadiants = []
 
 
-def calcAngleBetweenVectors(vec1, vec2):
+rightHipAngle = []
+leftHipAngle = []
+
+rightHipRadiants = []
+leftHipRadiants = []
+
+pelvisAngleR = []
+pelvisAngleL = []
+
+rightPelvisRadiants = []
+leftPelvisRadiants = []
+
+
+trunkAngleR = []
+trunkAngleL = []
+
+rightTrunkRadiants = []
+leftTrunkRadiants = []
+
+
+rightFootGXCoord= []
+rightFootGYCoord= []
+
+leftFootGXCoord = []
+leftFootGYCoord = []
+
+rightFootGRFX= []
+rightFootGRFY= []
+
+leftFootGRFX= []
+leftFootGRFY= []
+
+rightFootXCOP= []
+rightFootYCOP= []
+
+leftFootXCOP= []
+leftFootYCOP= []
+
+absoluteAnglesRightAnkle = []
+
+horizontal_vector = np.array([1, 0])
+
+
+def calcAngleInRadiantsBetweenVectors(vec1, vec2):
     # Convert input vectors to numpy arrays
     vec1 = np.array(vec1)
     vec2 = np.array(vec2)
@@ -76,14 +141,11 @@ def calcAngleBetweenVectors(vec1, vec2):
     
     # Calculate the angle in radians and then convert to degrees
     angle_radians = np.arccos(dot_product / (magnitude_vec1 * magnitude_vec2))
-
-    angle_degrees = np.degrees(angle_radians)
     
-    return angle_degrees
+    return angle_radians
 
-
-def calcAngleBetweenVectorsAbsolute(vec1, vec2):
-    # Convert input vectors to numpy arrays
+def calcHipAngle(vec1,vec2):
+      # Convert input vectors to numpy arrays
     vec1 = np.array(vec1)
     vec2 = np.array(vec2)
     
@@ -92,19 +154,32 @@ def calcAngleBetweenVectorsAbsolute(vec1, vec2):
     magnitude_vec1 = np.linalg.norm(vec1)
     magnitude_vec2 = np.linalg.norm(vec2)
     
-    # Use arctan2 to find signed angle in radians
-    angle_radians = np.arctan2(
-        np.linalg.det([vec1, vec2]),  # Determinant gives the sign
-        dot_product  # Cosine of angle
-    )
+    # Calculate the angle in radians using arccos of the normalized dot product
+    angle_radians = np.arccos(dot_product / (magnitude_vec1 * magnitude_vec2))
     
-    # Convert radians to degrees
+    # Calculate the cross product to determine the angle's sign in 2D
+    cross_product = np.cross(vec1, vec2)
+    
+    # Convert to degrees and adjust for full 0-360 range
     angle_degrees = np.degrees(angle_radians)
+    
+    # If cross product is negative, adjust angle to reflect 360-degree range
+    if cross_product < 0:
+        angle_degrees = 360 - angle_degrees
     
     return angle_degrees
 
+def calculateFA(listOfPositions, listOfForces, weight, isY):
+    timeStamp = 0.01
+    listOfPositionsVelocityOnG = np.gradient(listOfPositions,timeStamp)
+    listOfPositionsAccellerationOnG = np.gradient(listOfPositionsVelocityOnG, timeStamp)
+    accelerationArray = weight * listOfPositionsAccellerationOnG
+    pureAccellerationValue = listOfPositionsAccellerationOnG
+    if isY != True:
+        return accelerationArray + listOfForces
+    else:
+        return accelerationArray - listOfForces
 
-    
 def plotAngleForJoint(right_angles,left_angles, joint):
     timestamps = np.arange(len(right_angles))
     # Plotting
@@ -118,66 +193,226 @@ def plotAngleForJoint(right_angles,left_angles, joint):
     plt.grid(True)
     plt.show()
 
+def plot (value1):
+    timestamps = np.arange(len(value1))
+    # Plotting
+    plt.figure(figsize=(10, 5))
+    plt.plot(timestamps, value1, marker='o', linestyle='-', color='g')
+    plt.grid(True)
+    plt.show()
 
-rightAnkleAngles = []
-leftAnkleAngles = []
+def plot4(value1,value2 = [],value3 = [] ,value4 = []):
+    timestamps = np.arange(len(value1))
+    # Plotting
+    plt.figure(figsize=(10, 5))
+    if value1.any():
+        plt.plot(timestamps, value1, marker='o', linestyle='-', color='g')
+    if value2.any():
+        plt.plot(timestamps, value2, marker='o', linestyle='-', color='b')
+    if value3.any() :
+        plt.plot(timestamps, value3, marker='o', linestyle='-', color='r')
+    if value4.any() :
+        plt.plot(timestamps, value4, marker='o', linestyle='-', color='y')    
 
-rightKneeAngles = []
-leftKneeAngles = []
+    plt.grid(True)
+    plt.show()
 
-rightHipAngle = []
-leftHipAngle = []
 
-pelvisAngleR = []
-pelvisAngleL = []
 
-trunkAngle = []
-leftTrunkAngle = []
+def plotAngleForAbsolute(right_angles,left_angles, joint):
+    timestamps = np.arange(len(right_angles))
+    # Plotting
+    plt.figure(figsize=(10, 5))
+    plt.plot(timestamps, right_angles, marker='o', linestyle='-', color='g')
+    plt.plot(timestamps, left_angles, marker='o', linestyle='-', color='r')
 
-horizontal_vector = np.array([1, 0])
+    plt.title("Absolute " + joint + " angle over time")
+    plt.xlabel("Time" + (" (seconds)" if timestamps is not None else " (Index)"))
+    plt.ylabel("Angle (degrees)")
+    plt.grid(True)
+    plt.show()
+
+def calculateTheMa(GRFx,GRFy, COPx,COPy, Gx,Gy, FAx, FAy, Ay, Ax, Igf, Of):
+    COPy = np.array(COPy)
+    Gy = np.array(Gy)
+    GRFx = np.array(GRFx)
+    GRFy = np.array(GRFy)
+    COPx = np.array(COPx)
+    Gx = np.array(Gx)
+    FAx = np.array(FAx)
+    FAy = np.array(FAy)
+    Ay = np.array(Ay)
+    Ax = np.array(Ax)
+    # Ma = []
+    # for i in range(len(COPx)):
+    #     if COPx[i] <= Gx[i]:
+    #         Ma.append(np.multiply(Igf, Of) - GRFx[i] * (COPy[i] - Gy[i]) - GRFy[i] * (COPx[i] - Gx[i]) + FAx[i] * (Ay[i] - Gy[i]) + FAy[i] * (Gx[i] - Ax[i]))
+    #     else:
+    #         Ma.append(np.multiply(Igf, Of) - GRFx[i] * (COPy[i] - Gy[i]) - GRFy[i] * (COPx[i] - Gx[i]) + FAx[i] * (Ay[i] - Gy[i]) + FAy[i] * (Gx[i] - Ax[i]))
+    
+    FX = FAx * (Ay - Gy)
+    FY = FAy * (Gx - Ax)
+    GFX =  GRFx * (COPy - Gy) 
+    GFY = GRFy * (COPx - Gx )
+
+    Ma = np.multiply(Igf, Of) - FX + FY - GFX - GFY
+    
+    plot4(FX,FY,GFX,GFY)
+
+    return Ma 
+
 
 for i in range(46, 151):
+    
+    #Vectors
     vr_right_Knee = np.array([RKNEE_x[i] - RANKLE_x[i], RKNEE_y[i] - RANKLE_y[i]])
     vr_right_Ankle = np.array([RANKLE_x[i] - RTOE_x[i], RANKLE_y[i] - RTOE_y[i]])
     vr_right_Hip = np.array([RHIP_x[i] - RKNEE_x[i], RHIP_y[i] - RKNEE_y[i]])
-    pelvic_vector = np.array([PELO_x[i] - PELP_x[i], PELO_y[i] - PELP_y[i]])
+    pelvic_vector = np.array([PELO_x[i] - PELP_x[i], PELO_y[i] - PELP_y[i]])    
+    trunk_vector = np.array([TRXO_x[i] - TRXP_x[i], TRXO_y[i] - TRXP_y[i]])    
+    
+    #Centers
+    rightFootGX = (RTOE_x[i] + RANKLE_x[i]) / 2
+    rightFootGY = (RTOE_y[i] + RANKLE_y[i]) / 2
 
+    #GroundForces
+    RightGRFx = FP2_force_x[i]
+    RightGRFy = FP2_force_y[i]
+    RightCopGRFx = FP2_COP_x[i]
+    RightCopGRFy = FP2_COP_y[i]
+    
+    
     # Calculate angle between vectors and add to list
-    rightAnkleAngles.append(calcAngleBetweenVectors(vr_right_Knee, vr_right_Ankle) - 80)
-    rightKneeAngles.append(calcAngleBetweenVectors(vr_right_Hip,vr_right_Knee))
-    rightHipAngle.append(calcAngleBetweenVectorsAbsolute(pelvic_vector,vr_right_Hip))
-    pelvisAngleR.append(calcAngleBetweenVectors(pelvic_vector, horizontal_vector) - 90)
+    rightAnkleAngles.append(np.degrees(calcAngleInRadiantsBetweenVectors(vr_right_Knee, vr_right_Ankle)) - 80)
+    rightAnkleRadiants.append(calcAngleInRadiantsBetweenVectors(vr_right_Knee, vr_right_Ankle))
+
+    rightKneeAngles.append(np.degrees(calcAngleInRadiantsBetweenVectors(vr_right_Hip,vr_right_Knee)))
+    rightKneeRadiants.append(calcAngleInRadiantsBetweenVectors(vr_right_Hip,vr_right_Knee))
+
+    rightHipAngle.append(calcHipAngle(pelvic_vector, vr_right_Hip)-180)
+    rightHipRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector,vr_right_Hip))
+
+    pelvisAngleR.append(np.degrees(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector)) - 90)
+    rightPelvisRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector))
+
+    trunkAngleR.append(np.degrees(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector)) - 90)
+    rightTrunkRadiants.append(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector))
+
+    #Coordinates for the centers of gravitiy
+    rightFootGXCoord.append(rightFootGX)
+    rightFootGYCoord.append(rightFootGY)
+    
+    #Forces Array
+    rightFootGRFX.append(RightGRFx)
+    rightFootGRFY.append(RightGRFy)
+
+    #COP
+    rightFootXCOP.append(RightCopGRFx)
+    rightFootYCOP.append(RightCopGRFy)
+
 
 for j in range(98, 203):
+    
+    #Vectors
     vr_left_Knee = np.array([LKNEE_x[j] - LANKLE_x[j], LKNEE_y[j] - LANKLE_y[j]])
     vr_left_Ankle = np.array([LANKLE_x[j] - LTOE_x[j], LANKLE_y[j] - LTOE_y[j]])
     vr_left_Hip = np.array([LHIP_x[j] - LKNEE_x[j], LHIP_y[j] - LKNEE_y[j]])
     pelvic_vector = np.array([PELO_x[j] - PELP_x[j], PELO_y[j] - PELP_y[j]])
+    trunk_vector = np.array([TRXO_x[j] - TRXP_x[j], TRXO_y[j] - TRXP_y[j]])    
 
-    # Calculate angle between vectors and add to list
-    leftAnkleAngles.append(calcAngleBetweenVectors(vr_left_Knee, vr_left_Ankle) - 85)
-    leftKneeAngles.append(calcAngleBetweenVectors(vr_left_Hip,vr_left_Knee))
-    leftHipAngle.append(calcAngleBetweenVectorsAbsolute( pelvic_vector,vr_left_Hip))
-    pelvisAngleL.append(calcAngleBetweenVectors(pelvic_vector, horizontal_vector)- 90)
-    #trunkAngle.append(calcAngleBetweenVectors(pelvic_vector, horizontal_vector))
+    #Centers
+    leftFootGX = (LTOE_x[j] + LANKLE_x[j]) / 2
+    leftFootGY = (LTOE_y[j] + LANKLE_y[j]) / 2
+    
+    #GroundForces
+    LeftGRFx = FP1_force_x[j]
+    LeftGRFy = FP1_force_y[j]
+    LeftCopGRFx = FP1_COP_x[j]
+    LeftCopGRFy = FP1_COP_y[j]
+
+    # Calculate angle between vectors and radiants between vectors saving them in arrays
+    leftAnkleAngles.append(np.degrees(calcAngleInRadiantsBetweenVectors(vr_left_Knee, vr_left_Ankle)) - 85)
+    leftAnkleRadiants.append(calcAngleInRadiantsBetweenVectors(vr_left_Knee, vr_left_Ankle))
+
+    leftKneeAngles.append(np.degrees(calcAngleInRadiantsBetweenVectors(vr_left_Hip,vr_left_Knee)))
+    leftKneeRadiants.append(calcAngleInRadiantsBetweenVectors(vr_left_Hip,vr_left_Knee))
+
+    
+    leftHipAngle.append(calcHipAngle( pelvic_vector,vr_left_Hip)-180)
+    leftHipRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector,vr_left_Hip))
+
+    pelvisAngleL.append(np.degrees(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector))- 90)
+    leftPelvisRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector))
+
+    trunkAngleL.append(np.degrees(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector)) - 90)
+    leftTrunkRadiants.append(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector))
+
+    #Coordinates for the centers of gravitiy        
+    leftFootGXCoord.append(leftFootGX)
+    leftFootGYCoord.append(leftFootGY)
+
+    #Forces Array
+    leftFootGRFX.append(LeftGRFx)
+    leftFootGRFY.append(LeftGRFy)
+
+    #COP
+    leftFootXCOP.append(LeftCopGRFx)
+    leftFootYCOP.append(LeftCopGRFy)
+
+    #AbsoluteAngles
+#Calculate the forces
+
+rightFootSumFx = calculateFA(rightFootGXCoord,rightFootGRFX, footWeight, False)
+leftFootSumFx = calculateFA(leftFootGXCoord,leftFootGRFX, footWeight, False)
+
+rightFootSumFy = calculateFA(rightFootGYCoord,rightFootGRFY,footWeight, True)
+leftFootSumFy = calculateFA(leftFootGYCoord,leftFootGRFY, footWeight,True)
 
 
-# Plot the calculated angles
-plotAngleForJoint(rightAnkleAngles,leftAnkleAngles, " Ankle")
+timestamps = np.arange(len(rightFootSumFx))
+rightFootIgf  = ((0.450 * rightFootLength) ** 2) * footWeight
+subset_RANKLE_x = RANKLE_x[46:151]  # End index is exclusive, so use 152
+subset_RANKLE_y = RANKLE_y[46:151]
+acclerationOfAnkle = np.gradient(rightAnkleRadiants,1)
+velocityOfAnkle = np.gradient(acclerationOfAnkle,1)
 
-plotAngleForJoint(rightKneeAngles,leftKneeAngles, " Knee")
+rightAnkleMoment = calculateTheMa(rightFootGRFX,rightFootGRFY,rightFootXCOP,rightFootYCOP,rightFootGXCoord,rightFootGYCoord, rightFootSumFx,rightFootSumFy,subset_RANKLE_x,subset_RANKLE_y,rightFootIgf,velocityOfAnkle)
 
-plotAngleForJoint(rightHipAngle,leftHipAngle, " Hip")
+timestamps = np.arange(len(rightAnkleMoment))
 
-plt.figure(figsize=(10, 5))
-plt.plot(pelvisAngleL, marker='o', linestyle='-', color='b')
-plt.plot(pelvisAngleR, marker='o', linestyle='-', color='r')
-plt.title("Absolute Pelvic Angle Over Time")
-plt.xlabel("Time (Index)")
-plt.ylabel("Pelvic Angle (degrees)")
-plt.grid(True)
-plt.show()
+# # Plotting
+# plt.figure(figsize=(10, 5))
+# plt.plot(timestamps, rightAnkleMoment, marker='o', linestyle='-', color='g')
+# plt.title("")
+# plt.xlabel("Time" + (" (seconds)" if timestamps is not None else " (Index)"))
+# plt.ylabel("")
+# plt.grid(True)
+# plt.show()
 
+plot(rightAnkleMoment)
+
+# # Plotting
+# plt.figure(figsize=(10, 5))
+# plt.plot(timestamps, rightFootGXCoord, marker='o', linestyle='-', color='g')
+# plt.plot(timestamps, rightFootXCOP, marker='o', linestyle='-', color='b')
+# plt.title("")
+# plt.xlabel("Time" + (" (seconds)" if timestamps is not None else " (Index)"))
+# plt.ylabel("")
+# plt.grid(True)
+# plt.show()
+
+# timestamps = np.arange(len(rightAnkleAngles))
+
+# # Plot the calculated angles
+# plotAngleForJoint(rightAnkleAngles,leftAnkleAngles, " Ankle")
+
+# plotAngleForJoint(rightKneeAngles,leftKneeAngles, " Knee")
+
+# plotAngleForJoint(rightHipAngle,leftHipAngle, " Hip")
+
+# plotAngleForAbsolute(pelvisAngleR,pelvisAngleL, "Pelvis")
+
+# plotAngleForAbsolute(trunkAngleR,trunkAngleL, "Trunk")
 
 
 
