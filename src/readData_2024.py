@@ -15,7 +15,6 @@ index = 0  # Example: index=0 for Walking, index=1 for Jogging, index=2 for Crou
 data_trc = pd.read_csv(f"{name_motion[index]}.csv")
 data_grf = pd.read_csv(f"{name_grf[index]}.csv")
 
-
 # Downsample ground reaction data to match the trajectory data length
 data_grf_s = data_grf.iloc[::10, :].reset_index(drop=True)
 
@@ -65,12 +64,17 @@ FP1_COP_y = data_grf_s['FP1_COP_Z'] * to_meters
 
 FP2_force_x = data_grf_s['FP2_Force_Y']
 FP2_force_y = data_grf_s['FP2_Force_Z']
+
 FP2_COP_x = data_grf_s['FP2_COP_Y'] * to_meters
 FP2_COP_y = data_grf_s['FP2_COP_Z'] * to_meters
 
-leftFootVectorLenght = LANKLE_x[41] - LTOE_x[41]
+leftFootVectorLenght = (LANKLE_x[98] - LTOE_x[98], LANKLE_y[98] - LTOE_y[98])
 rightFootVectorLeght = (RANKLE_x[41] - RTOE_x[41], RANKLE_y[41] - RTOE_y[41])
 rightFootLength = np.sqrt(rightFootVectorLeght[0]**2 + rightFootVectorLeght[1]**2)
+leftFootLength = np.sqrt(leftFootVectorLenght[0]**2 + leftFootVectorLenght[1]**2)
+
+
+
 
 #arrays to be populated during frame analysis
 rightAnkleAngles = []
@@ -129,22 +133,22 @@ absoluteAnglesRightAnkle = []
 horizontal_vector = np.array([1, 0])
 
 
-def calcAngleInRadiantsBetweenVectors(vec1, vec2):
-    # Convert input vectors to numpy arrays
-    vec1 = np.array(vec1)
-    vec2 = np.array(vec2)
+# def calcAngleInRadiantsBetweenVectors(vec1, vec2):
+#     # Convert input vectors to numpy arrays
+#     vec1 = np.array(vec1)
+#     vec2 = np.array(vec2)
 
-    # Calculate the dot product and magnitudes of the vectors
-    dot_product = np.dot(vec1, vec2)
-    magnitude_vec1 = np.linalg.norm(vec1)
-    magnitude_vec2 = np.linalg.norm(vec2)
+#     # Calculate the dot product and magnitudes of the vectors
+#     dot_product = np.dot(vec1, vec2)
+#     magnitude_vec1 = np.linalg.norm(vec1)
+#     magnitude_vec2 = np.linalg.norm(vec2)
     
-    # Calculate the angle in radians and then convert to degrees
-    angle_radians = np.arccos(dot_product / (magnitude_vec1 * magnitude_vec2))
+#     # Calculate the angle in radians and then convert to degrees
+#     angle_radians = np.arccos(dot_product / (magnitude_vec1 * magnitude_vec2))
     
-    return angle_radians
+#     return angle_radians
 
-def calcHipAngle(vec1,vec2):
+def calcDegreesAngle(vec1,vec2):
       # Convert input vectors to numpy arrays
     vec1 = np.array(vec1)
     vec2 = np.array(vec2)
@@ -162,22 +166,43 @@ def calcHipAngle(vec1,vec2):
     
     # Convert to degrees and adjust for full 0-360 range
     angle_degrees = np.degrees(angle_radians)
-    
+
     # If cross product is negative, adjust angle to reflect 360-degree range
     if cross_product < 0:
         angle_degrees = 360 - angle_degrees
     
     return angle_degrees
 
+def calcRadientsAngle(vec1,vec2):
+      # Convert input vectors to numpy arrays
+    vec1 = np.array(vec1)
+    vec2 = np.array(vec2)
+    
+    # Calculate the dot product and magnitudes of the vectors
+    dot_product = np.dot(vec1, vec2)
+    magnitude_vec1 = np.linalg.norm(vec1)
+    magnitude_vec2 = np.linalg.norm(vec2)
+    
+    # Calculate the angle in radians using arccos of the normalized dot product
+    angle_radians = np.arccos(dot_product / (magnitude_vec1 * magnitude_vec2))
+
+    return angle_radians
+
+
 def calculateFA(listOfPositions, listOfForces, weight, isY):
     timeStamp = 0.01
     listOfPositionsVelocityOnG = np.gradient(listOfPositions,timeStamp)
-    listOfPositionsAccellerationOnG = np.gradient(listOfPositionsVelocityOnG, timeStamp)
-    accelerationArray = weight * listOfPositionsAccellerationOnG
-    pureAccellerationValue = listOfPositionsAccellerationOnG
-    if isY != True:
-        return accelerationArray + listOfForces
+    if isY == True:
+        listOfPositionsAccellerationOnG =  np.gradient(listOfPositionsVelocityOnG, timeStamp) - gravity
+        accelerationArray = weight * listOfPositionsAccellerationOnG
+        plot(listOfPositionsAccellerationOnG, "Y")
+
+        return accelerationArray  - listOfForces
+    
     else:
+        listOfPositionsAccellerationOnG = np.gradient(listOfPositionsVelocityOnG, timeStamp)
+        accelerationArray = weight * listOfPositionsAccellerationOnG
+        plot(listOfPositionsAccellerationOnG, "X")
         return accelerationArray - listOfForces
 
 def plotAngleForJoint(right_angles,left_angles, joint):
@@ -193,11 +218,12 @@ def plotAngleForJoint(right_angles,left_angles, joint):
     plt.grid(True)
     plt.show()
 
-def plot (value1):
+def plot (value1, plotWhat):
     timestamps = np.arange(len(value1))
     # Plotting
     plt.figure(figsize=(10, 5))
     plt.plot(timestamps, value1, marker='o', linestyle='-', color='g')
+    plt.xlabel(plotWhat)
     plt.grid(True)
     plt.show()
 
@@ -232,7 +258,7 @@ def plotAngleForAbsolute(right_angles,left_angles, joint):
     plt.grid(True)
     plt.show()
 
-def calculateTheMa(GRFx,GRFy, COPx,COPy, Gx,Gy, FAx, FAy, Ay, Ax, Igf, Of):
+def calculateTheMa(GRFx,GRFy, COPx,COPy, Gx,Gy, FAx, FAy, Ax,Ay, Igf, Of):
     COPy = np.array(COPy)
     Gy = np.array(Gy)
     GRFx = np.array(GRFx)
@@ -243,23 +269,40 @@ def calculateTheMa(GRFx,GRFy, COPx,COPy, Gx,Gy, FAx, FAy, Ay, Ax, Igf, Of):
     FAy = np.array(FAy)
     Ay = np.array(Ay)
     Ax = np.array(Ax)
-    # Ma = []
-    # for i in range(len(COPx)):
-    #     if COPx[i] <= Gx[i]:
-    #         Ma.append(np.multiply(Igf, Of) - GRFx[i] * (COPy[i] - Gy[i]) - GRFy[i] * (COPx[i] - Gx[i]) + FAx[i] * (Ay[i] - Gy[i]) + FAy[i] * (Gx[i] - Ax[i]))
-    #     else:
-    #         Ma.append(np.multiply(Igf, Of) - GRFx[i] * (COPy[i] - Gy[i]) - GRFy[i] * (COPx[i] - Gx[i]) + FAx[i] * (Ay[i] - Gy[i]) + FAy[i] * (Gx[i] - Ax[i]))
+    Ma = []
+    #simplify operands for formula
+    # FX = FAx * abs(Gy - Ay)
+    # FY = FAy * abs(Gx - Ax)
+    # GFX =  GRFx * abs(COPy - Gy)
+    # GFY = GRFy * abs(COPx - Gx)
     
-    FX = FAx * (Ay - Gy)
-    FY = FAy * (Gx - Ax)
-    GFX =  GRFx * (COPy - Gy) 
-    GFY = GRFy * (COPx - Gx )
-
-    Ma = np.multiply(Igf, Of) - FX + FY - GFX - GFY
+    # plot(Ay-Gy, "GAy")
+    # plot(abs(Gx - Ax), "GAx")
+    # plot(abs(COPy - Gy), "Fcomy")
+    # plot(abs(COPx - Gx), "Fcomx")
     
-    plot4(FX,FY,GFX,GFY)
-
-    return Ma 
+    #Ma = (np.multiply(Igf, Of) + FX + FY - GFX - GFY) / (-72.8)
+    print("A")
+    print(np.multiply(Igf, Of)[0])
+    print("FX")
+    print(FAx[0] * abs((Gy[0] - Ay[0])))
+    print("FY")
+    print(FAy[0] * abs((Gx[0] - Ax[0])))
+    print("GFX")
+    print(GRFx[0] * abs((COPy[0] - Gy[0])))
+    print("GFY")
+    print(GRFy[0] * abs((COPx[0] - Gx[0] )))
+    for i in range(len(COPx)):
+        FX = FAx[i] * abs((Gy[i] - Ay[i]))
+        FY = FAy[i] * abs((Gx[i] - Ax[i]))
+        GFX =  GRFx[i] * abs((COPy[i] - Gy[i]))
+        GFY = GRFy[i] * abs((COPx[i] - Gx[i] ))
+        if COPx[i] <= Gx[i]:
+            Ma.append(-(np.multiply(Igf, Of) - FX - FY + GFX - GFY) / (-72.8))
+        else:
+            Ma.append(-(np.multiply(Igf, Of) - FX - FY + GFX + GFY) / (-72.8))
+    #plot4(FX,FY,GFX,GFY)
+    return Ma
 
 
 for i in range(46, 151):
@@ -272,9 +315,9 @@ for i in range(46, 151):
     trunk_vector = np.array([TRXO_x[i] - TRXP_x[i], TRXO_y[i] - TRXP_y[i]])    
     
     #Centers
-    rightFootGX = (RTOE_x[i] + RANKLE_x[i]) / 2
-    rightFootGY = (RTOE_y[i] + RANKLE_y[i]) / 2
-
+    rightFootGX = RANKLE_x[i] + (RTOE_x[i] - RANKLE_x[i]) / 2
+    rightFootGY = RANKLE_y[i] + (RTOE_y[i] - RANKLE_y[i]) / 2
+    
     #GroundForces
     RightGRFx = FP2_force_x[i]
     RightGRFy = FP2_force_y[i]
@@ -283,20 +326,20 @@ for i in range(46, 151):
     
     
     # Calculate angle between vectors and add to list
-    rightAnkleAngles.append(np.degrees(calcAngleInRadiantsBetweenVectors(vr_right_Knee, vr_right_Ankle)) - 80)
-    rightAnkleRadiants.append(calcAngleInRadiantsBetweenVectors(vr_right_Knee, vr_right_Ankle))
+    rightAnkleAngles.append(calcDegreesAngle(vr_right_Knee, vr_right_Ankle) - 80)
+    rightAnkleRadiants.append(calcRadientsAngle(vr_right_Knee, vr_right_Ankle))
 
-    rightKneeAngles.append(np.degrees(calcAngleInRadiantsBetweenVectors(vr_right_Hip,vr_right_Knee)))
-    rightKneeRadiants.append(calcAngleInRadiantsBetweenVectors(vr_right_Hip,vr_right_Knee))
+    rightKneeAngles.append(calcDegreesAngle(vr_right_Hip,vr_right_Knee))
+    #rightKneeRadiants.append(calcAngleInRadiantsBetweenVectors(vr_right_Hip,vr_right_Knee))
 
-    rightHipAngle.append(calcHipAngle(pelvic_vector, vr_right_Hip)-180)
-    rightHipRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector,vr_right_Hip))
+    rightHipAngle.append(calcDegreesAngle(pelvic_vector, vr_right_Hip)-180)
+    #rightHipRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector,vr_right_Hip))
 
-    pelvisAngleR.append(np.degrees(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector)) - 90)
-    rightPelvisRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector))
+    pelvisAngleR.append(calcDegreesAngle(pelvic_vector, horizontal_vector) - 90)
+    #rightPelvisRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector))
 
-    trunkAngleR.append(np.degrees(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector)) - 90)
-    rightTrunkRadiants.append(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector))
+    trunkAngleR.append(calcDegreesAngle(trunk_vector, horizontal_vector) - 90)
+    #rightTrunkRadiants.append(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector))
 
     #Coordinates for the centers of gravitiy
     rightFootGXCoord.append(rightFootGX)
@@ -321,8 +364,8 @@ for j in range(98, 203):
     trunk_vector = np.array([TRXO_x[j] - TRXP_x[j], TRXO_y[j] - TRXP_y[j]])    
 
     #Centers
-    leftFootGX = (LTOE_x[j] + LANKLE_x[j]) / 2
-    leftFootGY = (LTOE_y[j] + LANKLE_y[j]) / 2
+    leftFootGX = LANKLE_x[j] +  (LTOE_x[j] - LANKLE_x[j]) / 2
+    leftFootGY = LANKLE_y[j] + (LTOE_y[j] - LANKLE_y[j]) / 2
     
     #GroundForces
     LeftGRFx = FP1_force_x[j]
@@ -330,22 +373,22 @@ for j in range(98, 203):
     LeftCopGRFx = FP1_COP_x[j]
     LeftCopGRFy = FP1_COP_y[j]
 
-    # Calculate angle between vectors and radiants between vectors saving them in arrays
-    leftAnkleAngles.append(np.degrees(calcAngleInRadiantsBetweenVectors(vr_left_Knee, vr_left_Ankle)) - 85)
-    leftAnkleRadiants.append(calcAngleInRadiantsBetweenVectors(vr_left_Knee, vr_left_Ankle))
+    # # Calculate angle between vectors and radiants between vectors saving them in arrays
+    leftAnkleAngles.append(calcDegreesAngle(vr_left_Knee, vr_left_Ankle) - 85)
+    leftAnkleRadiants.append(calcRadientsAngle(vr_left_Knee, vr_left_Ankle))
 
-    leftKneeAngles.append(np.degrees(calcAngleInRadiantsBetweenVectors(vr_left_Hip,vr_left_Knee)))
-    leftKneeRadiants.append(calcAngleInRadiantsBetweenVectors(vr_left_Hip,vr_left_Knee))
+    leftKneeAngles.append(calcDegreesAngle(vr_left_Hip,vr_left_Knee))
+    # leftKneeRadiants.append(calcAngleInRadiantsBetweenVectors(vr_left_Hip,vr_left_Knee))
 
     
-    leftHipAngle.append(calcHipAngle( pelvic_vector,vr_left_Hip)-180)
-    leftHipRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector,vr_left_Hip))
+    leftHipAngle.append(calcDegreesAngle(pelvic_vector,vr_left_Hip)-180)
+    # leftHipRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector,vr_left_Hip))
 
-    pelvisAngleL.append(np.degrees(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector))- 90)
-    leftPelvisRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector))
+    pelvisAngleL.append(calcDegreesAngle(pelvic_vector, horizontal_vector)- 90)
+    # leftPelvisRadiants.append(calcAngleInRadiantsBetweenVectors(pelvic_vector, horizontal_vector))
 
-    trunkAngleL.append(np.degrees(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector)) - 90)
-    leftTrunkRadiants.append(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector))
+    trunkAngleL.append(calcDegreesAngle(trunk_vector, horizontal_vector) - 90)
+    # leftTrunkRadiants.append(calcAngleInRadiantsBetweenVectors(trunk_vector, horizontal_vector))
 
     #Coordinates for the centers of gravitiy        
     leftFootGXCoord.append(leftFootGX)
@@ -363,22 +406,26 @@ for j in range(98, 203):
 #Calculate the forces
 
 rightFootSumFx = calculateFA(rightFootGXCoord,rightFootGRFX, footWeight, False)
-leftFootSumFx = calculateFA(leftFootGXCoord,leftFootGRFX, footWeight, False)
+rightFootSumFy = calculateFA(rightFootGYCoord,rightFootGRFY, footWeight, True)
 
-rightFootSumFy = calculateFA(rightFootGYCoord,rightFootGRFY,footWeight, True)
-leftFootSumFy = calculateFA(leftFootGYCoord,leftFootGRFY, footWeight,True)
+#leftFootSumFx = calculateFA(leftFootGXCoord,leftFootGRFX, footWeight, False)
+#leftFootSumFy = calculateFA(leftFootGYCoord,leftFootGRFY, footWeight,True)
 
 
 timestamps = np.arange(len(rightFootSumFx))
 rightFootIgf  = ((0.450 * rightFootLength) ** 2) * footWeight
 subset_RANKLE_x = RANKLE_x[46:151]  # End index is exclusive, so use 152
 subset_RANKLE_y = RANKLE_y[46:151]
-acclerationOfAnkle = np.gradient(rightAnkleRadiants,1)
-velocityOfAnkle = np.gradient(acclerationOfAnkle,1)
+velocityOfAnkle = np.gradient(rightAnkleRadiants,0.01)
+acclerationOfAnkle = np.gradient(velocityOfAnkle,0.01)
 
-rightAnkleMoment = calculateTheMa(rightFootGRFX,rightFootGRFY,rightFootXCOP,rightFootYCOP,rightFootGXCoord,rightFootGYCoord, rightFootSumFx,rightFootSumFy,subset_RANKLE_x,subset_RANKLE_y,rightFootIgf,velocityOfAnkle)
+rightAnkleMoment = calculateTheMa(rightFootGRFX,rightFootGRFY,rightFootXCOP,rightFootYCOP,rightFootGXCoord,rightFootGYCoord, rightFootSumFx,rightFootSumFy,subset_RANKLE_x,subset_RANKLE_y,rightFootIgf,acclerationOfAnkle)
 
 timestamps = np.arange(len(rightAnkleMoment))
+#plot(acclerationOfAnkle, "acclerationOfAnkle")
+plot(rightAnkleMoment, "rightAnkleMoment")
+# plot(velocityOfAnkle, "GRFy")
+#plot(rightAnkleMoment, "Ma")
 
 # # Plotting
 # plt.figure(figsize=(10, 5))
@@ -389,9 +436,8 @@ timestamps = np.arange(len(rightAnkleMoment))
 # plt.grid(True)
 # plt.show()
 
-plot(rightAnkleMoment)
 
-# # Plotting
+# Plotting
 # plt.figure(figsize=(10, 5))
 # plt.plot(timestamps, rightFootGXCoord, marker='o', linestyle='-', color='g')
 # plt.plot(timestamps, rightFootXCOP, marker='o', linestyle='-', color='b')
@@ -403,7 +449,7 @@ plot(rightAnkleMoment)
 
 # timestamps = np.arange(len(rightAnkleAngles))
 
-# # Plot the calculated angles
+#Plot the calculated angles
 # plotAngleForJoint(rightAnkleAngles,leftAnkleAngles, " Ankle")
 
 # plotAngleForJoint(rightKneeAngles,leftKneeAngles, " Knee")
